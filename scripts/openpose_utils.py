@@ -4,7 +4,7 @@ import json
 import numpy as np
 
 # OpenPose video processing
-def process_video_with_openpose(video_path, output_dir, model_dir, json_filename, video_filename, OPENPOSE_BUILD_PATH):
+def process_video_with_openpose(video_path, output_dir, model_dir, json_filename, OPENPOSE_BUILD_PATH):
     """
     Process a video using OpenPose binary and save keypoints as JSON files
     """
