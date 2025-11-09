@@ -45,7 +45,6 @@ class VideoProcessor:
             print(f"Unexpected error processing video {video_path}: {e}")
             return False
 
-    @staticmethod
     def _create_output_directories(self, output_dir: str) -> None:
         """Create necessary output directories"""
         os.makedirs(os.path.join(output_dir, "json"), exist_ok=True)
