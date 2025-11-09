@@ -1,164 +1,253 @@
 import os
 import subprocess
 import json
+from typing import List, Dict, Optional, Tuple
 import numpy as np
 import pandas as pd
 from sktime.datasets import write_dataframe_to_tsfile
+from angle_utils import AngleData
 
-# OpenPose video processing
-def process_video_with_openpose(video_path, output_dir, model_dir, json_filename, OPENPOSE_BUILD_PATH):
-    """
-    Process a video using OpenPose binary and save keypoints as JSON files
-    """
-    os.makedirs(os.path.join(output_dir, "json"), exist_ok=True)
-    os.makedirs(os.path.join(output_dir, "rendered"), exist_ok=True)
-    cmd = [
-        f"{OPENPOSE_BUILD_PATH}/examples/openpose/openpose.bin",
-        "--video", video_path,
-        "--write_json", os.path.join(output_dir, "json", json_filename),
-        "--display", "0",
-        "--render_pose", "0",
-        "--model_folder", model_dir,
-        "--number_people_max", "1"
-    ]
-    print(f"Processing video: {video_path}")
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        print(f"Error processing video: {result.stderr}")
-        return False
-    print(f"Successfully processed video. JSON output in: {os.path.join(output_dir, 'json')}")
-    return True
 
-def json_to_time_series(video_path):
-    """
-    Convert OpenPose JSON output to an sktime-compatible nested pandas DataFrame (one-row panel).
+class OpenPoseConfig:
+    """Configuration class for OpenPose parameters"""
 
-    Input:
-    - video_path: path to a directory containing OpenPose JSON files for the video
-      (one JSON per frame). Filenames will be sorted lexicographically to form the
-      temporal order.
+    def __init__(self, openpose_build_path: str, model_dir: str, max_people: int = 1):
+        self.openpose_build_path = openpose_build_path
+        self.model_dir = model_dir
+        self.max_people = max_people
 
-    Output:
-    - pandas.DataFrame with one row (one series/sample). Each column corresponds
-      to a single dimension (keypoint_x/y/conf for each of the 25 keypoints,
-      total 25*3 = 75 columns). Each cell contains a pandas.Series of length T
-      (number of frames) representing the time series for that dimension. This
-      nested DataFrame is the canonical sktime panel format for a single
-      multivariate time series sample.
 
-    Notes / assumptions:
-    - If a frame has no detected people, a (25,3) array of zeros is used for that frame.
-    - Columns are named kp{idx}_{coord}, where coord is x, y, or c (confidence).
-    """
-    json_files = sorted([
-        os.path.join(video_path, f) for f in os.listdir(video_path)
-        if f.endswith(".json")
-    ])
-    keypoints_sequence = []
-    for json_file in json_files:
+class VideoProcessor:
+    """Handles video processing with OpenPose"""
+
+    def __init__(self, config: OpenPoseConfig):
+        self.config = config
+
+    def process_video(self, video_path: str, output_dir: str, json_filename: str) -> bool:
+        """
+        Process a video using OpenPose binary and save keypoints as JSON files
+        """
+        try:
+            self._create_output_directories(output_dir)
+            cmd = self._build_command(video_path, output_dir, json_filename)
+
+            print(f"Processing video: {video_path}")
+            result = subprocess.run(cmd, capture_output=True, text=True)
+
+            if result.returncode != 0:
+                print(f"Error processing video: {result.stderr}")
+                return False
+
+            print(f"Successfully processed video. JSON output in: {os.path.join(output_dir, 'json')}")
+            return True
+
+        except Exception as e:
+            print(f"Unexpected error processing video {video_path}: {e}")
+            return False
+
+    @staticmethod
+    def _create_output_directories(self, output_dir: str) -> None:
+        """Create necessary output directories"""
+        os.makedirs(os.path.join(output_dir, "json"), exist_ok=True)
+        os.makedirs(os.path.join(output_dir, "rendered"), exist_ok=True)
+
+    def _build_command(self, video_path: str, output_dir: str, json_filename: str) -> List[str]:
+        """Build the OpenPose command"""
+        return [
+            f"{self.config.openpose_build_path}/examples/openpose/openpose.bin",
+            "--video", video_path,
+            "--write_json", os.path.join(output_dir, "json", json_filename),
+            "--display", "0",
+            "--render_pose", "0",
+            "--model_folder", self.config.model_dir,
+            "--number_people_max", str(self.config.max_people)
+        ]
+
+
+class KeypointData:
+    """Represents keypoint data for a single frame"""
+
+    def __init__(self, keypoints: np.ndarray):
+        self.keypoints = keypoints
+
+    @classmethod
+    def from_json(cls, json_file: str) -> 'KeypointData':
+        """Create KeypointData from JSON file"""
         with open(json_file) as f:
             data = json.load(f)
-            if not data.get("people"):
-                keypoints_sequence.append(np.zeros((25, 3), dtype=np.float32))
-                continue
-            keypoints = np.array(data["people"][0]["pose_keypoints_2d"], dtype=np.float32)
-            keypoints = keypoints.reshape(-1, 3)
-            keypoints_sequence.append(keypoints)
 
-    if not keypoints_sequence:
-        # return empty DataFrame if no frames found
-        return pd.DataFrame()
+        if not data.get("people"):
+            return cls(np.zeros((25, 3), dtype=np.float32))
 
-    arr = np.stack(keypoints_sequence, axis=0)  # shape (T, 25, 3)
-    T = arr.shape[0]
-    # flatten last two dims to obtain 75 separate dimensions: order kp0_x,kp0_y,kp0_c,kp1_x,...
-    dims = arr.reshape(T, -1)  # shape (T, 75)
+        keypoints = np.array(data["people"][0]["pose_keypoints_2d"], dtype=np.float32)
+        keypoints = keypoints.reshape(-1, 3)
+        return cls(keypoints)
 
-    # build nested DataFrame: one row, columns for each flattened dim, cell contains pd.Series
-    col_names = []
-    for kp_idx in range(arr.shape[1]):
-        for coord in ("x", "y", "c"):
-            col_names.append(f"kp{kp_idx}_{coord}")
 
-    series_dict = {}
-    for i, name in enumerate(col_names):
-        # create a pandas Series for each dimension with integer index 0..T-1
-        series_dict[name] = pd.Series(dims[:, i])
+class VideoKeypointSequence:
+    """Represents keypoint sequence for an entire video"""
 
-    nested_df = pd.DataFrame([series_dict])
-    # set a meaningful index (directory basename) if possible
-    try:
-        nested_df.index = [os.path.basename(os.path.normpath(video_path))]
-    except Exception:
-        pass
+    def __init__(self, video_id: str, keypoints_sequence: List[KeypointData]):
+        self.video_id = video_id
+        self.keypoints_sequence = keypoints_sequence
 
-    return nested_df
+    @classmethod
+    def from_json_directory(cls, json_directory: str, landmark_groups: Dict) -> Optional['VideoKeypointSequence']:
+        """Create VideoKeypointSequence from directory of JSON files"""
+        json_files = cls._get_sorted_json_files(json_directory)
+        if not json_files:
+            return None
 
-def build_dataframe(dataset, base_json_dir):
-    """
-    Process JSON files and include metadata from the original dataset,
-    returning a combined pandas DataFrame in sktime's nested format.
+        keypoints_sequence = []
+        for json_file in json_files:
+            keypoint_data = KeypointData.from_json(json_file)
+            keypoint_with_angle = AngleData.from_keypoints(keypoint_data.keypoints, landmark_groups)
+            keypoints_sequence.append(keypoint_with_angle)
 
-    Parameters:
-    - dataset: dictionary containing metadata for the dataset.
-    - base_json_dir: directory containing JSON files for videos.
+        video_id = os.path.basename(os.path.normpath(json_directory))
+        return cls(video_id, keypoints_sequence)
 
-    Returns:
-    - pandas.DataFrame in sktime's nested format, with metadata included.
-    """
-    train_dataset = dataset['train']
-    video_metadata = {}
-    for i in range(len(train_dataset)):
-        item = train_dataset[i]
-        base_name = os.path.splitext(os.path.basename(item['drive_path']))[0]
-        video_metadata[base_name] = item
+    @staticmethod
+    def _get_sorted_json_files(directory: str) -> List[str]:
+        """Get sorted list of JSON files from directory"""
+        if not os.path.exists(directory):
+            return []
 
-    video_dirs = [
-        d for d in os.listdir(base_json_dir)
-        if os.path.isdir(os.path.join(base_json_dir, d)) and d.endswith('_keypoints')
-    ]
+        json_files = [
+            os.path.join(directory, f) for f in os.listdir(directory)
+            if f.endswith(".json")
+        ]
+        return sorted(json_files)
 
-    nested_dfs = []  # Collect nested DataFrames for combination
 
-    for video_dir in video_dirs:
-        video_path = os.path.join(base_json_dir, video_dir)
-        video_id = video_dir.replace('_keypoints', '')
-        metadata = video_metadata.get(video_id, {})
+class TimeSeriesConverter:
+    """Converts keypoint sequences to time series format"""
+
+    def __init__(self):
+        self.num_keypoints = 25
+        self.coordinates = ("x", "y", "c")
+
+    def convert_to_dataframe(self, video_sequence: VideoKeypointSequence) -> pd.DataFrame:
+        """
+        Convert OpenPose sequence to sktime-compatible nested pandas DataFrame
+        """
+        if not video_sequence.keypoints_sequence:
+            return pd.DataFrame()
+
+        # Convert to 3D array (T, 25, 3)
+        array_3d = self._sequence_to_3d_array(video_sequence.keypoints_sequence)
+
+        # Flatten to 2D array (T, 75)
+        flattened_array = self._flatten_keypoints(array_3d)
+
+        # Create nested DataFrame
+        return self._create_nested_dataframe(flattened_array, video_sequence.video_id)
+
+    @staticmethod
+    def _sequence_to_3d_array(self, keypoints_sequence: List[KeypointData]) -> np.ndarray:
+        """Convert list of KeypointData to 3D numpy array"""
+        return np.stack([kp.keypoints for kp in keypoints_sequence], axis=0)
+
+    @staticmethod
+    def _flatten_keypoints(self, array_3d: np.ndarray) -> np.ndarray:
+        """Flatten 3D keypoint array to 2D"""
+        return array_3d.reshape(array_3d.shape[0], -1)
+
+    def _create_nested_dataframe(self, flattened_array: np.ndarray, video_id: str) -> pd.DataFrame:
+        """Create nested pandas DataFrame in sktime format"""
+        column_names = self._generate_column_names()
+        series_dict = self._create_series_dict(flattened_array, column_names)
+
+        nested_df = pd.DataFrame([series_dict])
+        nested_df.index = [video_id]
+
+        return nested_df
+
+    def _generate_column_names(self) -> List[str]:
+        """Generate column names for keypoint features"""
+        return [f"kp{kp_idx}_{coord}"
+                for kp_idx in range(self.num_keypoints)
+                for coord in self.coordinates]
+
+    @staticmethod
+    def _create_series_dict(self, flattened_array: np.ndarray, column_names: List[str]) -> Dict:
+        """Create dictionary of pandas Series for nested DataFrame"""
+        series_dict = {}
+        for i, name in enumerate(column_names):
+            series_dict[name] = pd.Series(flattened_array[:, i])
+        return series_dict
+
+
+class PoseDatasetBuilder:
+    """Builds complete pose dataset from multiple videos"""
+
+    def __init__(self, base_json_dir: str):
+        self.base_json_dir = base_json_dir
+        self.converter = TimeSeriesConverter()
+
+    def build_dataset(self, landmark_groups: Dict) -> pd.DataFrame:
+        """
+        Build complete dataset from JSON files and metadata
+        """
+        video_directories = self._find_video_directories()
+
+        nested_dfs = []
+        for video_dir in video_directories:
+            video_df = self._process_single_video(video_dir, landmark_groups)
+            if video_df is not None:
+                nested_dfs.append(video_df)
+
+        return pd.concat(nested_dfs, ignore_index=True) if nested_dfs else pd.DataFrame()
+
+    def _find_video_directories(self) -> List[str]:
+        """Find all video directories containing keypoint data"""
+        if not os.path.exists(self.base_json_dir):
+            return []
+
+        return [
+            os.path.join(self.base_json_dir, d) for d in os.listdir(self.base_json_dir)
+            if os.path.isdir(os.path.join(self.base_json_dir, d)) and d.endswith('_keypoints')
+        ]
+
+    def _process_single_video(self, video_dir: str, landmark_groups: Dict) -> Optional[pd.DataFrame]:
+        """Process a single video directory"""
+        video_id = os.path.basename(video_dir).replace('_keypoints', '')
+
         print(f"\nProcessing: {video_id}")
-        time_series = json_to_time_series(video_path)
-        if time_series is not None:
-            nested_dfs.append(time_series)  # Add to nested DataFrame list
-            print(f"Added to DataFrame: {video_id}")
 
-    # Combine all nested DataFrames into a single DataFrame
-    combined_df = pd.concat(nested_dfs, ignore_index=True)
+        video_sequence = VideoKeypointSequence.from_json_directory(video_dir, landmark_groups)
+        if video_sequence is None:
+            return None
 
-    return combined_df
+        time_series_df = self.converter.convert_to_dataframe(video_sequence)
+        print(f"Added to DataFrame: {video_id}")
 
-def result_df_to_tsfile(combined_df, labels, output_path, problem_name="PoseClassification"):
-    """
-    Save a combined DataFrame in sktime's nested format to a .ts file.
+        return time_series_df
 
-    Parameters:
-    - combined_df: pandas.DataFrame in sktime's nested format.
-    - labels: list of class labels corresponding to each row in the DataFrame.
-    - output_path: directory to save the .ts file.
-    - problem_name: name of the classification problem (used in the .ts file).
-    """
-    if not isinstance(combined_df, pd.DataFrame):
-        raise ValueError("The input must be a pandas DataFrame.")
 
-    # Ensure labels are strings (required by write_dataframe_to_tsfile)
-    labels = [str(label) for label in labels]
+class TSFileWriter:
+    """Handles writing datasets to sktime .ts files"""
 
-    write_dataframe_to_tsfile(
-        data=combined_df,
-        path=output_path,
-        problem_name=problem_name,
-        class_label=list(set(labels)),
-        class_value_list=labels,
-        comment="Dataset created from combined DataFrame",
-        fold="_TRAIN"
-    )
+    @staticmethod
+    def save_to_tsfile(combined_df: pd.DataFrame, labels: List, output_path: str,
+                       problem_name: str = "PoseClassification") -> None:
+        """
+        Save a combined DataFrame in sktime's nested format to a .ts file.
+        """
+        if not isinstance(combined_df, pd.DataFrame):
+            raise ValueError("The input must be a pandas DataFrame.")
 
-    print(f"Dataset saved to {output_path}/{problem_name}_TRAIN.ts")
+        # Ensure labels are strings (required by write_dataframe_to_tsfile)
+        str_labels = [str(label) for label in labels]
+
+        write_dataframe_to_tsfile(
+            data=combined_df,
+            path=output_path,
+            problem_name=problem_name,
+            class_label=list(set(str_labels)),
+            class_value_list=str_labels,
+            comment="Dataset created from combined DataFrame",
+            fold="_TRAIN"
+        )
+
+        print(f"Dataset saved to {output_path}/{problem_name}_TRAIN.ts")
