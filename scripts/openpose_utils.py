@@ -189,6 +189,7 @@ class PoseDatasetBuilder:
 
         nested_dfs = []
         for video_dir in video_directories:
+            print(f"Processing video: {video_dir}")
             video_df = self._process_single_video(video_dir, landmark_groups)
             if video_df is not None:
                 nested_dfs.append(video_df)
