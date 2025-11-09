@@ -142,12 +142,10 @@ class TimeSeriesConverter:
         # Create nested DataFrame
         return self._create_nested_dataframe(flattened_array, video_sequence.video_id)
 
-    @staticmethod
     def _sequence_to_3d_array(self, keypoints_sequence: List[KeypointData]) -> np.ndarray:
         """Convert list of KeypointData to 3D numpy array"""
         return np.stack([kp.keypoints for kp in keypoints_sequence], axis=0)
 
-    @staticmethod
     def _flatten_keypoints(self, array_3d: np.ndarray) -> np.ndarray:
         """Flatten 3D keypoint array to 2D"""
         return array_3d.reshape(array_3d.shape[0], -1)
@@ -168,7 +166,6 @@ class TimeSeriesConverter:
                 for kp_idx in range(self.num_keypoints)
                 for coord in self.coordinates]
 
-    @staticmethod
     def _create_series_dict(self, flattened_array: np.ndarray, column_names: List[str]) -> Dict:
         """Create dictionary of pandas Series for nested DataFrame"""
         series_dict = {}
