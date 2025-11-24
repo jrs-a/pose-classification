@@ -95,7 +95,8 @@ class AngleCalculator3D:
             raise ValueError("No pose landmarks provided")
 
         # Extract keypoints
-        keypoints_dict = self.extract_keypoints(pose_landmarks)
+        # keypoints_dict = self.extract_keypoints(pose_landmarks) -> only for mediapipe
+        keypoints_dict = dict(np.ndenumerate(pose_landmarks))
         angle_dict = {}
 
         # Calculate angles for each joint group

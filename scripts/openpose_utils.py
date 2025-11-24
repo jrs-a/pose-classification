@@ -48,7 +48,7 @@ class VideoProcessor:
     def _create_output_directories(self, output_dir: str) -> None:
         """Create necessary output directories"""
         os.makedirs(os.path.join(output_dir, "json"), exist_ok=True)
-        os.makedirs(os.path.join(output_dir, "rendered"), exist_ok=True)
+        # os.makedirs(os.path.join(output_dir, "rendered"), exist_ok=True)
 
     def _build_command(self, video_path: str, output_dir: str, json_filename: str) -> List[str]:
         """Build the OpenPose command"""
@@ -79,7 +79,7 @@ class KeypointData:
             return cls(np.zeros((25, 3), dtype=np.float32))
 
         keypoints = np.array(data["people"][0]["pose_keypoints_2d"], dtype=np.float32)
-        keypoints = keypoints.reshape(-1, 3)
+        keypoints = keypoints.reshape(-1, 3) #reformat so each row represents [x, y, confidence] for one body keypoint
         return cls(keypoints)
 
 
