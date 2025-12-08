@@ -1,11 +1,11 @@
 import os
 import subprocess
 import json
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional
 import numpy as np
 import pandas as pd
 from sktime.datasets import write_dataframe_to_tsfile
-from angle_utils import AngleData
+from angle_utils import AngleDataOpenPose
 
 
 class OpenPoseConfig:
@@ -100,7 +100,8 @@ class VideoKeypointSequence:
         keypoints_sequence = []
         for json_file in json_files:
             keypoint_data = KeypointData.from_json(json_file)
-            keypoint_with_angle = AngleData.from_keypoints(keypoint_data.keypoints, landmark_groups)
+            print(f"{json_file}: {keypoint_data}")
+            keypoint_with_angle = AngleDataOpenPose.from_keypoints(keypoint_data.keypoints, landmark_groups)
             keypoints_sequence.append(keypoint_with_angle)
 
         video_id = os.path.basename(os.path.normpath(json_directory))
