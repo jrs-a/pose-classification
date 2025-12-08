@@ -271,10 +271,7 @@ class AngleDataOpenPose:
         angle_calculator = AngleCalculatorOpenPose(landmark_groups)
         angle_dict = angle_calculator.process_openpose_pose(keypoints, verbose=False)
 
-        keypoints_with_angles = []
-
         for joint_name, angle in angle_dict.items():
-            new_angle = np.array([[joint_name], [angle]], dtype=np.float32)
-            keypoints_with_angles = np.hstack((keypoints, new_angle))
+            keypoints[joint_name] = angle
 
-        return keypoints_with_angles
+        return keypoints
