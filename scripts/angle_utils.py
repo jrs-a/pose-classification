@@ -271,6 +271,6 @@ class AngleDataOpenPose:
         angle_dict = angle_calculator.process_openpose_pose(keypoints, verbose=False)
 
         for joint_name, angle in angle_dict.items():
-            keypoints = np.append(keypoints, [angle], axis=1)
+            keypoints = np.concatenate((keypoints, np.full((keypoints.shape[0], 1), angle)), axis=1)
 
         return keypoints
