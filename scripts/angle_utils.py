@@ -261,20 +261,20 @@ class AngleCalculatorOpenPose:
 class AngleDataOpenPose:
     """Represents angle data for a single frame with OpenPose data"""
 
-    def __init__(self, keypoints: np.ndarray, angles: Dict[str, float] = None):
+    def __init__(self, keypoints: np.ndarray, landmark_groups: Dict[str, float] = None):
         self.keypoints = keypoints
-        self.angles = angles if angles is not None else {}
+        self.landmark_groups = landmark_groups if landmark_groups is not None else {}
 
     @classmethod
     def from_keypoints(cls, keypoints: np.ndarray, landmark_groups: Dict = None) -> 'AngleDataOpenpose':
         """Create AngleData from OpenPose keypoints"""
         angle_calculator = AngleCalculatorOpenPose(landmark_groups)
-        angle_dict = angle_calculator.process_openpose_pose(keypoints, verbose=True)
+        angle_dict = angle_calculator.process_openpose_pose(keypoints, verbose=False)
 
-        return cls(keypoints, angle_dict)
+        keypoints_with_angles = []
 
-    def add_angles_to_keypoints(self) -> np.ndarray:
-        """Add angle information to keypoints array (optional)"""
-        # This is optional - you might want to keep angles separate
-        # If you want to append angles to keypoints, you can implement this
-        return self.keypoints
+        for joint_name, angle in angle_dict.items():
+            new_angle = np.array([[joint_name], [angle]], dtype=np.float32)
+            keypoints_with_angles = np.hstack((keypoints, new_angle))
+
+        return keypoints_with_angles
