@@ -100,7 +100,7 @@ class VideoKeypointSequence:
         keypoints_sequence = []
         for json_file in json_files:
             keypoint_data = KeypointData.from_json(json_file)
-            print(f"{json_file}: {keypoint_data}")
+            print(f"{json_file}: {keypoint_data.keypoints}")  # Debug print to show keypoints
             keypoint_with_angle = AngleDataOpenPose.from_keypoints(keypoint_data.keypoints, landmark_groups)
             keypoints_sequence.append(keypoint_with_angle)
 
