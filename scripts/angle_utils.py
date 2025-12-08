@@ -257,7 +257,6 @@ class AngleCalculatorOpenPose:
         return list(self.landmark_groups.keys())
 
 
-# TODO: the code should run this class instead of AngleData
 class AngleDataOpenPose:
     """Represents angle data for a single frame with OpenPose data"""
 
@@ -272,6 +271,7 @@ class AngleDataOpenPose:
         angle_dict = angle_calculator.process_openpose_pose(keypoints, verbose=False)
 
         for joint_name, angle in angle_dict.items():
-            keypoints[joint_name] = angle
+            keypoints = np.hstack(keypoints, angle)
+            keypoints = np.append(keypoints, [angle], axis=1)
 
         return keypoints

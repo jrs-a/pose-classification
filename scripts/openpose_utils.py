@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 from sktime.datasets import write_dataframe_to_tsfile
 from angle_utils import AngleDataOpenPose
+from scripts.angle_utils import AngleCalculatorOpenPose
 
 
 class OpenPoseConfig:
@@ -126,7 +127,7 @@ class TimeSeriesConverter:
         self.num_keypoints = 25
         self.coordinates = ("x", "y", "c")
 
-    def convert_to_dataframe(self, video_sequence: VideoKeypointSequence) -> pd.DataFrame:
+    def convert_to_dataframe(self, video_sequence: VideoKeypointSequence, landmark_groups: Dict) -> pd.DataFrame:
         """
         Convert OpenPose sequence to sktime-compatible nested pandas DataFrame
         """
@@ -140,7 +141,7 @@ class TimeSeriesConverter:
         flattened_array = self._flatten_keypoints(array_3d)
 
         # Create nested DataFrame
-        return self._create_nested_dataframe(flattened_array, video_sequence.video_id)
+        return self._create_nested_dataframe(flattened_array, video_sequence.video_id, landmark_groups)
 
     def _sequence_to_3d_array(self, keypoints_sequence: List[KeypointData]) -> np.ndarray:
         """Convert list of KeypointData to 3D numpy array"""
@@ -150,9 +151,9 @@ class TimeSeriesConverter:
         """Flatten 3D keypoint array to 2D"""
         return array_3d.reshape(array_3d.shape[0], -1)
 
-    def _create_nested_dataframe(self, flattened_array: np.ndarray, video_id: str) -> pd.DataFrame:
+    def _create_nested_dataframe(self, flattened_array: np.ndarray, video_id: str, landmark_groups: Dict) -> pd.DataFrame:
         """Create nested pandas DataFrame in sktime format"""
-        column_names = self._generate_column_names()
+        column_names = self._generate_column_names(landmark_groups)
         series_dict = self._create_series_dict(flattened_array, column_names)
 
         nested_df = pd.DataFrame([series_dict])
@@ -160,11 +161,15 @@ class TimeSeriesConverter:
 
         return nested_df
 
-    def _generate_column_names(self) -> List[str]:
+    def _generate_column_names(self, landmark_groups: Dict) -> List[str]:
         """Generate column names for keypoint features"""
-        return [f"kp{kp_idx}_{coord}"
+
+        column_names = [f"kp{kp_idx}_{coord}"
                 for kp_idx in range(self.num_keypoints)
                 for coord in self.coordinates]
+
+        for joint_name in landmark_groups.keys():
+            column_names.append(f"angle_{joint_name}")
 
     def _create_series_dict(self, flattened_array: np.ndarray, column_names: List[str]) -> Dict:
         """Create dictionary of pandas Series for nested DataFrame"""
@@ -216,7 +221,7 @@ class PoseDatasetBuilder:
         if video_sequence is None:
             return None
 
-        time_series_df = self.converter.convert_to_dataframe(video_sequence)
+        time_series_df = self.converter.convert_to_dataframe(video_sequence, landmark_groups)
         print(f"Added to DataFrame: {video_id}")
 
         return time_series_df
