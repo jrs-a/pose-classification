@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 from sktime.datasets import write_dataframe_to_tsfile
 from angle_utils import AngleDataOpenPose
-from scripts.angle_utils import AngleCalculatorOpenPose
+from angle_utils import AngleCalculatorOpenPose
 
 
 class OpenPoseConfig:

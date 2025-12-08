@@ -271,7 +271,6 @@ class AngleDataOpenPose:
         angle_dict = angle_calculator.process_openpose_pose(keypoints, verbose=False)
 
         for joint_name, angle in angle_dict.items():
-            keypoints = np.hstack(keypoints, angle)
             keypoints = np.append(keypoints, [angle], axis=1)
 
         return keypoints
