@@ -180,6 +180,8 @@ class TimeSeriesConverter:
         for joint_name in landmark_groups.keys():
             column_names.append(f"angle_{joint_name}")
 
+        return column_names
+
     def _create_series_dict(self, flattened_array: np.ndarray, column_names: List[str]) -> Dict:
         """Create dictionary of pandas Series for nested DataFrame"""
         series_dict = {}
