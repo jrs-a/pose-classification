@@ -144,8 +144,17 @@ class TimeSeriesConverter:
         return self._create_nested_dataframe(flattened_array, video_sequence.video_id, landmark_groups)
 
     def _sequence_to_3d_array(self, keypoints_sequence: List[KeypointData]) -> np.ndarray:
-        """Convert list of KeypointData to 3D numpy array"""
-        return np.stack([kp.keypoints for kp in keypoints_sequence], axis=0)
+        """Convert list of KeypointData or ndarray to 3D numpy array"""
+        arrays = []
+        for kp in keypoints_sequence:
+            if hasattr(kp, "keypoints"):
+                arrays.append(kp.keypoints)
+            elif isinstance(kp, np.ndarray):
+                arrays.append(kp)
+            else:
+                raise TypeError(f"Unsupported sequence element type: {type(kp)}")
+
+        return np.stack(arrays, axis=0) if arrays else np.empty((0, self.num_keypoints, len(self.coordinates)))
 
     def _flatten_keypoints(self, array_3d: np.ndarray) -> np.ndarray:
         """Flatten 3D keypoint array to 2D"""
