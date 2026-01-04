@@ -217,7 +217,8 @@ class PoseDatasetBuilder:
 
                 # parse name and add label to array
                 video_name = video_dir.replace("poseEstKeypointsData/json/", "")
-                correctness = parse_video_metadata("", video_name)["correctness"]
+                parsed_details = parse_video_metadata("", video_name)
+                correctness = parsed_details["correctness"]
                 labels.append(correctness)
 
                 print(f"Added to DataFrame: {video_dir} with label: {correctness}")
