@@ -198,7 +198,7 @@ class PoseDatasetBuilder:
         self.base_json_dir = base_json_dir
         self.converter = TimeSeriesConverter()
 
-    def build_dataset(self, landmark_groups: Dict, labels: np.ndarray) -> pd.DataFrame:
+    def build_dataset(self, landmark_groups: Dict, labels: np.ndarray, exercise_code) -> pd.DataFrame:
         """
         Build complete dataset from JSON files and metadata
         """
@@ -207,20 +207,23 @@ class PoseDatasetBuilder:
         counter = 1
 
         for video_dir in video_directories:
-            print(f"\nProcessing video ({counter}/{len(video_directories)}): {video_dir}")
+            # parse name and add label to array
+            video_name = video_dir.replace("poseEstKeypointsData/json/", "")
+            video_name = video_name.replace("_keypoints", "")
+            parts = video_name.split('_')
+            exercise, view, correctness, participant, unique_id = parts
 
-            video_df = self._process_single_video(video_dir, landmark_groups)
-            if video_df is not None:
-                nested_dfs.append(video_df)
+            if exercise == exercise_code:
+                print(f"\nProcessing video ({counter}/{len(video_directories)}): {video_dir}")
 
-                # parse name and add label to array
-                video_name = video_dir.replace("poseEstKeypointsData/json/", "")
-                video_name = video_name.replace("_keypoints", "")
-                parts = video_name.split('_')
-                exercise, view, correctness, participant, unique_id = parts
-                labels.append(correctness)
+                video_df = self._process_single_video(video_dir, landmark_groups)
+                if video_df is not None:
+                    nested_dfs.append(video_df)
+                    labels.append(correctness)
 
-                print(f"Added to DataFrame: {video_dir} with label: {correctness}")
+                    print(f"Added to DataFrame: {video_dir} with label: {correctness}")
+
+            print(f"Skipped video ({counter}/{len(video_directories)}): {video_dir} (exercise code mismatch)")
 
             counter += 1
 
