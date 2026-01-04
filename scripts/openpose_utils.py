@@ -7,7 +7,6 @@ import pandas as pd
 from sktime.datasets import write_dataframe_to_tsfile
 from angle_utils import AngleDataOpenPose
 from angle_utils import AngleCalculatorOpenPose
-from metadata_utils import parse_video_metadata
 
 
 class OpenPoseConfig:
@@ -101,7 +100,6 @@ class VideoKeypointSequence:
 
         keypoints_sequence = []
         for json_file in json_files:
-            print(f"Processing JSON file: {json_file}")
             keypoint_data = KeypointData.from_json(json_file)
             keypoint_with_angle = AngleDataOpenPose.from_keypoints(keypoint_data.keypoints, landmark_groups)
             keypoints_sequence.append(keypoint_with_angle)
@@ -217,8 +215,8 @@ class PoseDatasetBuilder:
 
                 # parse name and add label to array
                 video_name = video_dir.replace("poseEstKeypointsData/json/", "")
-                parsed_details = parse_video_metadata("", video_name)
-                correctness = parsed_details["correctness"]
+                parts = video_name.split('_')
+                exercise, view, correctness, participant, unique_id = parts
                 labels.append(correctness)
 
                 print(f"Added to DataFrame: {video_dir} with label: {correctness}")
