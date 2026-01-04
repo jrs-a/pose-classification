@@ -7,6 +7,7 @@ import pandas as pd
 from sktime.datasets import write_dataframe_to_tsfile
 from angle_utils import AngleDataOpenPose
 from angle_utils import AngleCalculatorOpenPose
+from metadata_utils import parse_video_metadata
 
 
 class OpenPoseConfig:
@@ -117,6 +118,11 @@ class VideoKeypointSequence:
             os.path.join(directory, f) for f in os.listdir(directory)
             if f.endswith(".json")
         ]
+
+        print(f"Found {len(json_files)} JSON files in {directory}")
+        for f in json_files:
+            print(f" - {f}")
+
         return sorted(json_files)
 
 
@@ -197,18 +203,29 @@ class PoseDatasetBuilder:
         self.base_json_dir = base_json_dir
         self.converter = TimeSeriesConverter()
 
-    def build_dataset(self, landmark_groups: Dict) -> pd.DataFrame:
+    def build_dataset(self, landmark_groups: Dict, labels: np.ndarray) -> pd.DataFrame:
         """
         Build complete dataset from JSON files and metadata
         """
         video_directories = self._find_video_directories()
-
         nested_dfs = []
+        counter = 1
+
         for video_dir in video_directories:
-            print(f"Processing video: {video_dir}")
+            print(f"\nProcessing video ({counter}/{len(video_directories)}): {video_dir}")
+
             video_df = self._process_single_video(video_dir, landmark_groups)
             if video_df is not None:
                 nested_dfs.append(video_df)
+
+                # parse name and add label to array
+                video_name = video_dir.replace("poseEstKeypointsData/json/", "")
+                correctness = parse_video_metadata("", video_name).get("correctness")
+                labels.append(correctness)
+
+                print(f"Added to DataFrame: {video_dir} with label: {correctness}")
+
+            counter += 1
 
         return pd.concat(nested_dfs, ignore_index=True) if nested_dfs else pd.DataFrame()
 
@@ -224,19 +241,12 @@ class PoseDatasetBuilder:
 
     def _process_single_video(self, video_dir: str, landmark_groups: Dict) -> Optional[pd.DataFrame]:
         """Process a single video directory"""
-        video_id = os.path.basename(video_dir).replace('_keypoints', '')
-
-        print(f"\nProcessing: {video_id}")
 
         video_sequence = VideoKeypointSequence.from_json_directory(video_dir, landmark_groups)
         if video_sequence is None:
             return None
 
-        time_series_df = self.converter.convert_to_dataframe(video_sequence, landmark_groups)
-        print(f"Added to DataFrame: {video_id}")
-
-        return time_series_df
-
+        return self.converter.convert_to_dataframe(video_sequence, landmark_groups)
 
 class TSFileWriter:
     """Handles writing datasets to sktime .ts files"""
