@@ -215,6 +215,7 @@ class PoseDatasetBuilder:
 
                 # parse name and add label to array
                 video_name = video_dir.replace("poseEstKeypointsData/json/", "")
+                video_name = video_name.replace("_keypoints", "")
                 parts = video_name.split('_')
                 exercise, view, correctness, participant, unique_id = parts
                 labels.append(correctness)
