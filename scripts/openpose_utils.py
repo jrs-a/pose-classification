@@ -101,6 +101,7 @@ class VideoKeypointSequence:
 
         keypoints_sequence = []
         for json_file in json_files:
+            print(f"Processing JSON file: {json_file}")
             keypoint_data = KeypointData.from_json(json_file)
             keypoint_with_angle = AngleDataOpenPose.from_keypoints(keypoint_data.keypoints, landmark_groups)
             keypoints_sequence.append(keypoint_with_angle)
@@ -118,10 +119,6 @@ class VideoKeypointSequence:
             os.path.join(directory, f) for f in os.listdir(directory)
             if f.endswith(".json")
         ]
-
-        print(f"Found {len(json_files)} JSON files in {directory}")
-        for f in json_files:
-            print(f" - {f}")
 
         return sorted(json_files)
 
@@ -220,7 +217,7 @@ class PoseDatasetBuilder:
 
                 # parse name and add label to array
                 video_name = video_dir.replace("poseEstKeypointsData/json/", "")
-                correctness = parse_video_metadata("", video_name).get("correctness")
+                correctness = parse_video_metadata("", video_name)["correctness"]
                 labels.append(correctness)
 
                 print(f"Added to DataFrame: {video_dir} with label: {correctness}")
