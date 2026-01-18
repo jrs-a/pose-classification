@@ -65,7 +65,7 @@ class VideoProcessor:
 
 
 class KeypointData:
-    """Represents keypoint data for a single frame"""
+    """Represents array of keypoints for a single frame where each row is [x, y, confidence]. This way the array has indices"""
 
     def __init__(self, keypoints: np.ndarray):
         self.keypoints = keypoints
@@ -80,7 +80,13 @@ class KeypointData:
             return cls(np.zeros((25, 3), dtype=np.float32))
 
         keypoints = np.array(data["people"][0]["pose_keypoints_2d"], dtype=np.float32)
-        keypoints = keypoints.reshape(-1, 3) #reformat so each row represents [x, y, confidence] for one body keypoint
+
+        # only reshape if not already 2D with 3 columns
+        if not (keypoints.ndim == 2 and keypoints.shape[1] == 3):
+            if keypoints.ndim == 1 and keypoints.size % 3 == 0:
+                keypoints = keypoints.reshape(-1, 3)
+            else:
+                raise ValueError(f"Unexpected keypoints shape {keypoints.shape}; cannot reshape to (-1, 3)")
         return cls(keypoints)
 
 
@@ -145,7 +151,11 @@ class TimeSeriesConverter:
         return self._create_nested_dataframe(flattened_array, video_sequence.video_id, landmark_groups)
 
     def _sequence_to_3d_array(self, keypoints_sequence: List[KeypointData]) -> np.ndarray:
-        """Convert list of KeypointData or ndarray to 3D numpy array"""
+        """
+        Input: a list of frames where each frame is a (25, 3) array (x, y, confidence).
+        Output: a 3D numpy array with shape (T, 25, 3) where T is the number of frames.
+        \nWhy: stacking preserves temporal order and the spatial layout of keypoints. It produces a single, fixed-shaped structure so you can apply vectorized operations, reshape reliably, and guarantee consistent ordering of features across videos.
+        """
         arrays = []
         for kp in keypoints_sequence:
             if hasattr(kp, "keypoints"):
@@ -158,11 +168,21 @@ class TimeSeriesConverter:
         return np.stack(arrays, axis=0) if arrays else np.empty((0, self.num_keypoints, len(self.coordinates)))
 
     def _flatten_keypoints(self, array_3d: np.ndarray) -> np.ndarray:
-        """Flatten 3D keypoint array to 2D"""
+        """
+        Input: (T, 25, 3) array.
+        Output: (T, 75) array by concatenating the 25 keypoints' 3 coordinates per frame.
+        \nWhy: sktime nested DataFrame expects each feature column to be a time series (a pd.Series of length T). Flattening maps each keypoint/coordinate to a distinct column index (e.g., kp0_x, kp0_y, kp0_c, ...). That makes it trivial to create one pd.Series per feature: each pd.Series contains the T values across frames.
+        """
         return array_3d.reshape(array_3d.shape[0], -1)
 
     def _create_nested_dataframe(self, flattened_array: np.ndarray, video_id: str, landmark_groups: Dict) -> pd.DataFrame:
-        """Create nested pandas DataFrame in sktime format"""
+        """
+        Flatten 3D keypoint array to 2D
+        \n- For each flattened column create a pd.Series of length T and put it into a single-row DataFrame indexed by video_id.
+        - Angle features are appended the same way (one pd.Series per angle).
+        - Result matches sktime’s expected format: one sample per row, each cell a time series for a feature.
+        """
+
         column_names = self._generate_column_names(landmark_groups)
         series_dict = self._create_series_dict(flattened_array, column_names)
 
