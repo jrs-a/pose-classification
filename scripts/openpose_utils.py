@@ -242,8 +242,8 @@ class PoseDatasetBuilder:
                     labels.append(correctness)
 
                     print(f"Added to DataFrame: {video_dir} with label: {correctness}")
-
-            print(f"Skipped video ({counter}/{len(video_directories)}): {video_dir} (exercise code mismatch)")
+            else:
+                print(f"Skipped video ({counter}/{len(video_directories)}): {video_dir} (exercise code mismatch)")
 
             counter += 1
 
