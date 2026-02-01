@@ -71,12 +71,14 @@ class KeypointData:
         self.keypoints = keypoints
 
     @classmethod
-    def from_json(cls, json_file: str) -> 'KeypointData':
+    def from_json(cls, json_file: str, pose_model) -> 'KeypointData':
         """Create KeypointData from JSON file"""
         with open(json_file) as f:
             data = json.load(f)
 
-        if not data.get("people"):
+        if pose_model == "mediapipe" and not data.get("people"):
+            return cls(np.zeros((33, 3), dtype=np.float32))
+        elif not data.get("people"):
             return cls(np.zeros((25, 3), dtype=np.float32))
 
         keypoints = np.array(data["people"][0]["pose_keypoints_2d"], dtype=np.float32)
@@ -98,7 +100,7 @@ class VideoKeypointSequence:
         self.keypoints_sequence = keypoints_sequence
 
     @classmethod
-    def from_json_directory(cls, json_directory: str, landmark_groups: Dict) -> Optional['VideoKeypointSequence']:
+    def from_json_directory(cls, json_directory: str, landmark_groups: Dict, pose_model) -> Optional['VideoKeypointSequence']:
         """Create VideoKeypointSequence from directory of JSON files"""
         json_files = cls._get_sorted_json_files(json_directory)
         if not json_files:
@@ -106,7 +108,7 @@ class VideoKeypointSequence:
 
         keypoints_sequence = []
         for json_file in json_files:
-            keypoint_data = KeypointData.from_json(json_file)
+            keypoint_data = KeypointData.from_json(json_file, pose_model)
             keypoint_with_angle = AngleDataOpenPose.from_keypoints(keypoint_data.keypoints, landmark_groups)
             keypoints_sequence.append(keypoint_with_angle)
 
@@ -218,7 +220,7 @@ class PoseDatasetBuilder:
         self.base_json_dir = base_json_dir
         self.converter = TimeSeriesConverter()
 
-    def build_dataset(self, landmark_groups: Dict, labels: np.ndarray, exercise_code) -> pd.DataFrame:
+    def build_dataset(self, landmark_groups: Dict, labels: np.ndarray, exercise_code, pose_model) -> pd.DataFrame:
         """
         Build complete dataset from JSON files and metadata
         """
@@ -236,7 +238,7 @@ class PoseDatasetBuilder:
             if exercise == exercise_code:
                 print(f"\nProcessing video ({counter}/{len(video_directories)}): {video_dir}")
 
-                video_df = self._process_single_video(video_dir, landmark_groups)
+                video_df = self._process_single_video(video_dir, landmark_groups, pose_model)
                 if video_df is not None:
                     nested_dfs.append(video_df)
                     labels.append(correctness)
@@ -259,10 +261,10 @@ class PoseDatasetBuilder:
             if os.path.isdir(os.path.join(self.base_json_dir, d)) and d.endswith('_keypoints')
         ]
 
-    def _process_single_video(self, video_dir: str, landmark_groups: Dict) -> Optional[pd.DataFrame]:
+    def _process_single_video(self, video_dir: str, landmark_groups: Dict, pose_model) -> Optional[pd.DataFrame]:
         """Process a single video directory"""
 
-        video_sequence = VideoKeypointSequence.from_json_directory(video_dir, landmark_groups)
+        video_sequence = VideoKeypointSequence.from_json_directory(video_dir, landmark_groups, pose_model)
         if video_sequence is None:
             return None
 
